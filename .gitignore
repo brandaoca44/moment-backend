@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+build/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# operating system
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# test coverage
+coverage/
+
+# prisma local artifacts
+prisma/dev.db
+prisma/dev.db-journal
+
+# uploads locais, se existir algo legado
+uploads/
+
+# temporary files
+tmp/
+temp/
+*.tmp

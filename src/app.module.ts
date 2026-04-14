@@ -1,0 +1,36 @@
+import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { PostModule } from './modules/post/post.module';
+import { UploadModule } from './modules/upload/upload.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 60,
+      },
+    ]),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    PostModule,
+    UploadModule,
+    ModerationModule,
+    NotificationsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}

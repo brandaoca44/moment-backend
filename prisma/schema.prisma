@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String   @db.VarChar(80)
+  username         String   @unique @db.VarChar(30)
+  email            String   @unique @db.VarChar(120)
+  password         String
+  avatar           String?
+  refreshTokenHash String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  posts               Post[]
+  likes               Like[]
+  remonts             Remont[]
+  follows             Follow[]       @relation("Follower")
+  followers           Follow[]       @relation("Following")
+  mentionsReceived    Mention[]
+  notifications       Notification[]
+  actedNotifications  Notification[] @relation("NotificationActor")
+
+  @@index([username])
+  @@index([email])
+}
+
+enum ModerationStatus {
+  APPROVED
+  PENDING_REVIEW
+  BLOCKED
+}
+
+enum NotificationType {
+  MENTION
+}
+
+model Post {
+  id               String           @id @default(cuid())
+  content          String           @db.VarChar(220)
+  imageUrl         String?
+  moderationStatus ModerationStatus @default(APPROVED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  likes         Like[]
+  remonts       Remont[]
+  mentions      Mention[]
+  notifications Notification[]
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([moderationStatus])
+}
+
+model Like {
+  createdAt DateTime @default(now())
+
+  userId String
+  postId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+model Remont {
+  createdAt DateTime @default(now())
+
+  userId String
+  postId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+model Follow {
+  createdAt DateTime @default(now())
+
+  followerId  String
+  followingId String
+
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+model Mention {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  postId String
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@index([postId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String?
+  post   Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  actorId String
+  actor   User @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt(sort: Desc)])
+}

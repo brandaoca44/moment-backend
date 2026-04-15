@@ -21,18 +21,20 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { TCurrentUser } from './types/current-user.type';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: isProduction, // obrigatório em produção
+  sameSite: isProduction ? ('none' as const) : ('lax' as const),
   maxAge: 1000 * 60 * 15,
   path: '/',
 };
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: isProduction,
+  sameSite: isProduction ? ('none' as const) : ('lax' as const),
   maxAge: 1000 * 60 * 60 * 24 * 7,
   path: '/api/auth/refresh',
 };
@@ -137,8 +139,13 @@ export class AuthController {
       }
     }
 
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+    res.clearCookie('access_token', {
+      path: '/',
+    });
+
+    res.clearCookie('refresh_token', {
+      path: '/api/auth/refresh',
+    });
 
     return { message: 'Logout realizado com sucesso.' };
   }

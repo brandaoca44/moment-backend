@@ -10,6 +10,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { HealthController } from './common/controllers/health.controller';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ModerationModule,
     NotificationsModule,
   ],
+  controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,

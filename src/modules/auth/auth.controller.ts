@@ -14,6 +14,12 @@ import { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -25,7 +31,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: isProduction, // obrigatório em produção
+  secure: isProduction,
   sameSite: isProduction ? ('none' as const) : ('lax' as const),
   maxAge: 1000 * 60 * 15,
   path: '/',
@@ -39,6 +45,7 @@ const REFRESH_COOKIE_OPTIONS = {
   path: '/api/auth/refresh',
 };
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -47,12 +54,31 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Retorna o usuário autenticado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuário autenticado retornado com sucesso.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Usuário não autenticado.',
+  })
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getMe(@CurrentUser() user: TCurrentUser) {
     return { user };
   }
 
+  @ApiOperation({ summary: 'Registra um novo usuário' })
+  @ApiResponse({
+    status: 201,
+    description: 'Usuário registrado com sucesso.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Dados inválidos ou usuário já existente.',
+  })
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post('register')
   async register(
@@ -67,6 +93,15 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @ApiOperation({ summary: 'Realiza login do usuário' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login realizado com sucesso.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Credenciais inválidas.',
+  })
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -82,6 +117,15 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @ApiOperation({ summary: 'Renova os tokens usando o refresh token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Tokens renovados com sucesso.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Refresh token ausente, inválido ou expirado.',
+  })
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -116,6 +160,11 @@ export class AuthController {
     return { message: 'Tokens renovados com sucesso.' };
   }
 
+  @ApiOperation({ summary: 'Realiza logout do usuário' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout realizado com sucesso.',
+  })
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
@@ -139,13 +188,14 @@ export class AuthController {
       }
     }
 
-    res.clearCookie('access_token', {
-      path: '/',
-    });
+    const clearOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? ('none' as const) : ('lax' as const),
+};
 
-    res.clearCookie('refresh_token', {
-      path: '/api/auth/refresh',
-    });
+res.clearCookie('access_token', { ...clearOptions, path: '/' });
+res.clearCookie('refresh_token', { ...clearOptions, path: '/api/auth/refresh' });
 
     return { message: 'Logout realizado com sucesso.' };
   }

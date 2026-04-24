@@ -5,13 +5,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { TCurrentUser } from '@/modules/auth/types/current-user.type';
+import { BlockService } from '@/modules/block/block.service';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly blockService: BlockService,
+  ) {}
 
   private getSafeLimit(limit?: number) {
     const parsed = Number(limit);
@@ -21,15 +25,35 @@ export class NotificationsService {
 
   async findMine(user: TCurrentUser, limit?: number) {
     const safeLimit = this.getSafeLimit(limit);
+    const blockedIds = await this.blockService.getBlockedIds(user.id);
+
+    const blockFilter =
+      blockedIds.size > 0
+        ? {
+            actorId: {
+              notIn: [...blockedIds],
+            },
+            OR: [
+              {
+                post: null,
+              },
+              {
+                post: {
+                  userId: {
+                    notIn: [...blockedIds],
+                  },
+                },
+              },
+            ],
+          }
+        : {};
 
     const notifications = await this.prisma.notification.findMany({
       where: {
         userId: user.id,
+        ...blockFilter,
       },
-      orderBy: [
-        { createdAt: 'desc' },
-        { id: 'desc' },
-      ],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: safeLimit,
       select: {
         id: true,
@@ -69,6 +93,7 @@ export class NotificationsService {
       where: {
         userId: user.id,
         read: false,
+        ...blockFilter,
       },
     });
 
@@ -96,9 +121,7 @@ export class NotificationsService {
     }
 
     if (notification.userId !== user.id) {
-      throw new ForbiddenException(
-        'Você não pode alterar esta notificação.',
-      );
+      throw new ForbiddenException('Você não pode alterar esta notificação.');
     }
 
     if (notification.read) {
@@ -118,19 +141,43 @@ export class NotificationsService {
   }
 
   async markAllAsRead(user: TCurrentUser) {
-    const result = await this.prisma.notification.updateMany({
-      where: {
-        userId: user.id,
-        read: false,
-      },
-      data: {
-        read: true,
-      },
-    });
+  const blockedIds = await this.blockService.getBlockedIds(user.id);
 
-    return {
-      message: 'Notificações marcadas como lidas.',
-      updatedCount: result.count,
-    };
+  const blockFilter =
+    blockedIds.size > 0
+      ? {
+          actorId: {
+            notIn: [...blockedIds],
+          },
+          OR: [
+            {
+              post: null,
+            },
+            {
+              post: {
+                userId: {
+                  notIn: [...blockedIds],
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
+  const result = await this.prisma.notification.updateMany({
+    where: {
+      userId: user.id,
+      read: false,
+      ...blockFilter,
+    },
+    data: {
+      read: true,
+    },
+  });
+
+  return {
+    message: 'Notificações marcadas como lidas.',
+    updatedCount: result.count,
+  };
   }
 }

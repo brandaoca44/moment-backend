@@ -10,6 +10,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { TCurrentUser } from '@/modules/auth/types/current-user.type';
 import { ModerationService } from '@/modules/moderation/moderation.service';
 import { UploadService } from '@/modules/upload/upload.service';
+import { BlockService } from '@/modules/block/block.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { extractMentions } from '@/common/utils/extract-mentions.util';
@@ -31,6 +32,7 @@ export class PostService {
     private readonly prisma: PrismaService,
     private readonly moderation: ModerationService,
     private readonly upload: UploadService,
+    private readonly blockService: BlockService,
   ) {}
 
   private getSafeLimit(limit?: number): number {
@@ -109,6 +111,33 @@ export class PostService {
     };
   }
 
+
+  private async ensurePostInteractable(postId: string, user: TCurrentUser) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        userId: true,
+        moderationStatus: true,
+      },
+    });
+
+    if (!post || post.moderationStatus !== ModerationStatus.APPROVED) {
+      throw new NotFoundException('Post não encontrado.');
+    }
+
+    const isBlocked = await this.blockService.isBlockedBetween(
+      user.id,
+      post.userId,
+    );
+
+    if (isBlocked) {
+      throw new ForbiddenException('Você não pode interagir com este post.');
+    }
+
+    return post;
+  }
+
   private async resolveMentionedUsers(content: string, authorId: string) {
     const usernames = extractMentions(content);
 
@@ -122,6 +151,8 @@ export class PostService {
       return [];
     }
 
+    const blockedIds = await this.blockService.getBlockedIds(authorId);
+
     const users = await this.prisma.user.findMany({
       where: {
         username: {
@@ -129,6 +160,7 @@ export class PostService {
         },
         id: {
           not: authorId,
+          ...(blockedIds.size > 0 ? { notIn: [...blockedIds] } : {}),
         },
       },
       select: {
@@ -276,13 +308,15 @@ export class PostService {
     });
   }
 
-  async findFeed(cursor?: string, limit?: number) {
+  async findFeed(currentUser: TCurrentUser, cursor?: string, limit?: number) {
     const safeLimit = this.getSafeLimit(limit);
     const cursorWhere = this.buildCursorWhere(cursor);
+    const blockedIds = await this.blockService.getBlockedIds(currentUser.id);
 
     const posts = await this.prisma.post.findMany({
       where: {
         moderationStatus: ModerationStatus.APPROVED,
+        ...(blockedIds.size > 0 ? { userId: { notIn: [...blockedIds] } } : {}),
         ...(cursorWhere ?? {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -300,6 +334,7 @@ export class PostService {
   ) {
     const safeLimit = this.getSafeLimit(limit);
     const cursorWhere = this.buildCursorWhere(cursor);
+    const blockedIds = await this.blockService.getBlockedIds(user.id);
 
     const following = await this.prisma.follow.findMany({
       where: { followerId: user.id },
@@ -307,7 +342,12 @@ export class PostService {
     });
 
     const followingIds = [
-      ...new Set([...following.map((f) => f.followingId), user.id]),
+      ...new Set([
+        ...following
+          .map((f) => f.followingId)
+          .filter((id) => !blockedIds.has(id)),
+        user.id,
+      ]),
     ];
 
     const posts = await this.prisma.post.findMany({
@@ -324,7 +364,11 @@ export class PostService {
     return this.buildCursorMeta(posts, safeLimit);
   }
 
-  async findOne(postId: string) {
+  async findOne(postId: string, user?: TCurrentUser) {
+    if (user) {
+      await this.ensurePostInteractable(postId, user);
+    }
+
     const post = await this.prisma.post.findFirst({
       where: {
         id: postId,
@@ -436,7 +480,7 @@ export class PostService {
   }
 
   async toggleLike(postId: string, user: TCurrentUser) {
-    await this.ensurePostExists(postId);
+    await this.ensurePostInteractable(postId, user);
 
     const existingLike = await this.prisma.like.findUnique({
       where: { userId_postId: { userId: user.id, postId } },
@@ -470,7 +514,7 @@ export class PostService {
   }
 
   async getLikeStatus(postId: string, user: TCurrentUser) {
-    await this.ensurePostExists(postId);
+    await this.ensurePostInteractable(postId, user);
 
     const like = await this.prisma.like.findUnique({
       where: { userId_postId: { userId: user.id, postId } },
@@ -485,7 +529,7 @@ export class PostService {
   }
 
   async toggleRemont(postId: string, user: TCurrentUser) {
-    await this.ensurePostExists(postId);
+    await this.ensurePostInteractable(postId, user);
 
     const existingRemont = await this.prisma.remont.findUnique({
       where: { userId_postId: { userId: user.id, postId } },
@@ -519,7 +563,7 @@ export class PostService {
   }
 
   async getRemontStatus(postId: string, user: TCurrentUser) {
-    await this.ensurePostExists(postId);
+    await this.ensurePostInteractable(postId, user);
 
     const remont = await this.prisma.remont.findUnique({
       where: { userId_postId: { userId: user.id, postId } },
@@ -533,18 +577,7 @@ export class PostService {
     };
   }
 
-  private async ensurePostExists(postId: string) {
-    const post = await this.prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true },
-    });
-
-    if (!post) {
-      throw new NotFoundException('Post não encontrado.');
-    }
-  }
-
-  private async safeDeleteImage(url: string, contextMessage: string) {
+    private async safeDeleteImage(url: string, contextMessage: string) {
     try {
       await this.upload.deleteImage(url);
     } catch (error) {

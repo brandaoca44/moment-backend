@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { TCurrentUser } from '@/modules/auth/types/current-user.type';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
+import { FindFeedQueryDto } from './dto/find-feed-query.dto';
 
 @ApiTags('Posts')
 @Controller('posts')
@@ -60,9 +61,12 @@ export class PostController {
   })
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Get()
-  async findFeed(@Query() query: PaginationQueryDto) {
-    return this.postService.findFeed(query.cursor, query.limit);
-  }
+async findFeed(
+  @CurrentUser() user: TCurrentUser,
+  @Query() query: FindFeedQueryDto,
+) {
+  return this.postService.findFeed(user, query.cursor, query.limit);
+}
 
   @ApiCookieAuth()
   @ApiOperation({ summary: 'Listar feed de usuários seguidos' })

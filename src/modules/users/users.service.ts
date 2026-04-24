@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import { TCurrentUser } from '@/modules/auth/types/current-user.type';
 import { UploadService } from '@/modules/upload/upload.service';
+import { BlockService } from '@/modules/block/block.service';
 
 @Injectable()
 export class UsersService {
@@ -15,18 +16,26 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly upload: UploadService,
+    private readonly blockService: BlockService,
   ) {}
 
   async getSuggestions(currentUser: TCurrentUser, limit = 5) {
     const safeLimit = Number(limit) > 0 ? Math.min(Number(limit), 20) : 5;
 
-    const following = await this.prisma.follow.findMany({
-      where: { followerId: currentUser.id },
-      select: { followingId: true },
-    });
+    const [following, blockedIds] = await Promise.all([
+      this.prisma.follow.findMany({
+        where: { followerId: currentUser.id },
+        select: { followingId: true },
+      }),
+      this.blockService.getBlockedIds(currentUser.id),
+    ]);
 
     const followingIds = following.map((f) => f.followingId);
-    const excludeIds = new Set([currentUser.id, ...followingIds]);
+    const excludeIds = new Set([
+      currentUser.id,
+      ...followingIds,
+      ...blockedIds,
+    ]);
 
     if (followingIds.length === 0) {
       const popular = await this.prisma.user.findMany({
@@ -215,6 +224,11 @@ export class UsersService {
   async followUser(targetUserId: string, currentUser: TCurrentUser) {
     if (targetUserId === currentUser.id) {
       throw new BadRequestException('Você não pode seguir a si mesmo.');
+    }
+
+    const blockedIds = await this.blockService.getBlockedIds(currentUser.id);
+    if (blockedIds.has(targetUserId)) {
+      throw new BadRequestException('Não é possível seguir este usuário.');
     }
 
     const targetUser = await this.prisma.user.findUnique({

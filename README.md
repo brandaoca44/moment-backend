@@ -13,6 +13,7 @@ Este backend é responsável por toda a lógica da aplicação, incluindo:
 * Sistema de "Loved" (likes)
 * Sistema de "ReMont" (repost)
 * Sistema de seguidores (follow)
+* Sistema de Block
 * Upload de imagens (Cloudflare R2)
 * Feed personalizado
 * Proteções contra abuso e conteúdo sensível

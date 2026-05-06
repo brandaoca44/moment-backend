@@ -41,6 +41,22 @@ export class PostService {
     return Math.min(parsed, MAX_LIMIT);
   }
 
+    private detectPostSource(userAgent?: string | string[]) {
+    const ua = Array.isArray(userAgent)
+      ? userAgent.join(' ')
+      : userAgent || '';
+
+    if (/iphone|ipad|ipod/i.test(ua)) {
+      return 'Moment for iPhone';
+    }
+
+    if (/android/i.test(ua)) {
+      return 'Moment for Android';
+    }
+
+    return 'Moment Web';
+  }
+
   private encodeCursor(payload: CursorPayload): string {
     return Buffer.from(JSON.stringify(payload)).toString('base64url');
   }
@@ -268,9 +284,14 @@ export class PostService {
     }
   }
 
-  async create(user: TCurrentUser, data: CreatePostDto) {
+    async create(
+    user: TCurrentUser,
+    data: CreatePostDto,
+    userAgent?: string | string[],
+  ) {
     const content = data.content.trim();
     const imageUrl = data.imageUrl?.trim() || null;
+    const source = this.detectPostSource(userAgent);
 
     const modResult = await this.moderation.moderate(content);
 
@@ -282,9 +303,10 @@ export class PostService {
 
     return this.prisma.$transaction(async (tx) => {
       const post = await tx.post.create({
-        data: {
+                data: {
           content,
           imageUrl,
+          source,
           userId: user.id,
           moderationStatus:
             modResult.action === 'PENDING_REVIEW'
@@ -593,6 +615,7 @@ export class PostService {
       id: true,
       content: true,
       imageUrl: true,
+      source: true,
       moderationStatus: true,
       createdAt: true,
       updatedAt: true,

@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -24,6 +25,7 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { TCurrentUser } from '@/modules/auth/types/current-user.type';
 import { PaginationQueryDto } from '@/common/dto/pagination-query.dto';
 import { FindFeedQueryDto } from './dto/find-feed-query.dto';
+import type { Request } from 'express';
 
 @ApiTags('Posts')
 @Controller('posts')
@@ -47,11 +49,12 @@ export class PostController {
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post()
-  async create(
+    async create(
     @CurrentUser() user: TCurrentUser,
     @Body() body: CreatePostDto,
+    @Req() req: Request,
   ) {
-    return this.postService.create(user, body);
+    return this.postService.create(user, body, req.headers['user-agent']);
   }
 
   @ApiOperation({ summary: 'Listar feed global' })
